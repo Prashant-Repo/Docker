@@ -1,0 +1,185 @@
+Docker Fundamentals
+####################
+
+Docker Image Layers
+--------------------
+
+1: Docker Images are comprised of multiple layers and a layer is just another image
+2: Every image contains a base layer(eg: OS installed)
+3: Docker uses a copy on write system(i.e is the reason why docker images are small and container build is fast)
+4: Layers are read only(When we add content Docker uses Copy on write approach and bring writable layer for container)
+
+The Container Writable Layer
+----------------------------
+
+1: Docker creates a top writable layer for containers 
+2: Parent images are read only
+3: All changes are made at the writeable layer
+
+http://jam.sg/blog/wp-content/uploads/2015/01/docker-filesystems-multilayer.png
+
+
+Docker Commit
+-------------
+
+Docker commit command saves changes in a container as a new image 
+
+docker commit <container id> <new image>
+
+[root@dockersystem docker]# docker commit 1494fcb15ac7 myfirstimage:1.0
+063847072a994ee6afafc87e69d492f07a7a93765d46c6c93e51063fcfb8e2ae
+
+Dockerfile
+----------
+
+A Dockerfile is a configuration file that contains instructions for building a Docker image 
+
+a: It Provide a more effective way to build images compared to using docker commit 
+b: Easily fits into your continious integration and deployment process
+
+Docker Instructions
+--------------------
+
+a: Instructions specify what to do when building the image 
+b: FROM instruction specifies what the base image should be(mandatory) 
+c: RUN instruction specifies a command to execute
+
+--------------------------
+FROM centos:5.11
+RUN yum -y install vim curl
+---------------------------
+
+Run Instructions
+-----------------
+
+1: Each run instruction will execute the command on the top writable layer and perform a commit of the image
+2: Can aggregrate multiple run instruction by using &&
+
+RUN yum update && yum -y install \
+       httpd \
+	   vim
+	   
+Docker Build
+------------
+
+docker build --no-cache -t firstdocker:1.0 .
+
+
+CMD Instruction
+---------------
+
+1: CMD defines a default command to execute when a container is created and perform no action during the image build 
+2: Can only be specified once in a Dockerfile and can be overridden at run time 
+
+Shell vs Exec Format
+--------------------
+
+Shell Format(Doesn't accept argument at run time)
+
+CMD ping -c 1 192.168.0.1
+
+
+So difference b/w CMD and EntryPoint is in case of CMD instruction can be overwritten but we can't do it in case of EntryPoint 
+
+
+Exec Format 
+
+CMD ["ping", "-c", "1", "192.168.0.1"]
+
+
+
+[root@dockerserver docker]# cat Dockerfile
+FROM docker.io/centos:latest
+RUN yum -y install vim
+ENTRYPOINT ["ping"]
+
+
+[root@dockerserver docker]# docker run firstdocker:1.1
+Usage: ping [-aAbBdDfhLnOqrRUvV] [-c count] [-i interval] [-I interface]
+            [-m mark] [-M pmtudisc_option] [-l preload] [-p pattern] [-Q tos]
+            [-s packetsize] [-S sndbuf] [-t ttl] [-T timestamp_option]
+            [-w deadline] [-W timeout] [hop1 ...] destination
+
+
+
+
+Start/Stop Container
+
+docker ps -a 
+
+docker stop <container id>			
+docker start <container id>
+
+Getting Terminal Access to Container 
+
+1: docker exec to start another process within a container
+2: Exiting from terminal will not terminate the container
+
+docker exec -it [container id] /bin/bash
+
+Deleting Container 
+
+docker rm <container id>
+
+Deleting images
+
+docker rmi <image id>
+
+docker rm $(docker ps -a -q)
+docker rmi $(docker images -a -q)
+
+Volumes 
+
+A Volume is a designated directory in a container,which is designed to persist data,independent of container life cycle 
+
+1: Volume changes are excluded when updating an image
+2: Persist when a container is deleted 
+3: Can be mapped to a host folder 
+4: Can be shared between containers 
+
+Execute a new container and mount the folder /mytestvol into its file system 
+docker run -d -P -v /mytestvol tomcat:8.01/docker-filesystems-multilayer
+
+Execute a new container and map the /test folder from host into the /test folder in the container 
+docker run -i -t -v /test:/test tomcat:8.0 
+
+
+Inside Dockerfile 
+
+VOLUME /test 
+
+VOLUME /test1 /test2  (We can't map volumes to host directories as dockerfiles are designed to run on any machine,so this folder might not exist on another machine )
+
+In JSON format
+
+VOLUME ["test1", "test2"]
+
+Mapping Ports
+
+We need map containers ports to ports on host machine(-p manually mapper or -P auto mapped)
+
+docker run -d -p 8080:80 tomcat:8.0 
+
+docker run -d -P tomcat:8.0 (Automatically exposed ports in the container to a port number in the host(49153 to 65535))
+
+-P Only works on Expose Instruction 
+
+EXPOSE 80 443 
+
+Linking Containers
+
+Linking is a communication method b/w containers which allows them to securely transfer data from one to another 
+
+1: Source and recipient containers
+2: Recipient containers have access to data on source containers 
+3: Links are established based on container names 
+
+Creating a Linking
+
+1: Creating the source container first 
+
+docker run -d --name database postgres 
+
+Create a recipient container and link it
+
+docker run -d -P --name website --link database:db nginx
